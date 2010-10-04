@@ -10,7 +10,7 @@ void integral(void)
 	printf("%8s |%6d |%18d |%18d\n",  "char",   CHAR_BIT, CHAR_MIN, CHAR_MAX);
 	printf("%8s |%6d |%18d |%18d\n",  "int" ,   8*sizeof(int), INT_MIN, INT_MAX);
 	printf("%8s |%6d |%18d |%18d\n",  "short",  8*sizeof(short), SHRT_MIN, SHRT_MAX);
-	printf("%8s |%6d |%18d |%18d\n",  "long",   8*sizeof(long),LONG_MIN, LONG_MAX);
+	printf("%8s |%6d |%18li |%18li\n",  "long",   8*sizeof(long),LONG_MIN, LONG_MAX);
 }
 
 void fractional(void)
@@ -20,7 +20,7 @@ void fractional(void)
 		   sizeof(float), FLT_DIG, FLT_EPSILON, FLT_MIN, FLT_MAX);
 	printf("%12s | %5d |%4d |%16e |%16e |%16e\n", "double",
 		   sizeof(double), DBL_DIG, DBL_EPSILON, DBL_MIN, DBL_MAX);
-	printf("%12s | %5d |%4d |%16e |%16e |%16e\n", "long double",
+	printf("%12s | %5d |%4d |%16le |%16le |%16le\n", "long double",
 		   sizeof(long double), LDBL_DIG, LDBL_EPSILON, LDBL_MIN, LDBL_MAX);
 }
 
