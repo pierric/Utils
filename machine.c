@@ -6,11 +6,12 @@
 
 void integral(void)
 {
-	printf("%8s |%6s |%18s |%18s\n",  "type",   "bits", "min", "max");
-	printf("%8s |%6d |%18d |%18d\n",  "char",   CHAR_BIT, CHAR_MIN, CHAR_MAX);
-	printf("%8s |%6d |%18d |%18d\n",  "int" ,   8*sizeof(int), INT_MIN, INT_MAX);
-	printf("%8s |%6d |%18d |%18d\n",  "short",  8*sizeof(short), SHRT_MIN, SHRT_MAX);
-	printf("%8s |%6d |%18li |%18li\n",  "long",   8*sizeof(long),LONG_MIN, LONG_MAX);
+	printf("%10s |%6s |%21s |%21s\n",  "type",   "bits", "min", "max");
+	printf("%10s |%6d |%21d |%21d\n",  "char",   CHAR_BIT, CHAR_MIN, CHAR_MAX);
+	printf("%10s |%6d |%21d |%21d\n",  "int" ,   8*sizeof(int), INT_MIN, INT_MAX);
+	printf("%10s |%6d |%21d |%21d\n",  "short",  8*sizeof(short), SHRT_MIN, SHRT_MAX);
+	printf("%10s |%6d |%21li |%21li\n",  "long",   8*sizeof(long),LONG_MIN, LONG_MAX);
+	printf("%10s |%6d |%21lli |%21lli\n", "long long", 8*sizeof(long long), LONG_LONG_MIN, LONG_LONG_MAX);
 }
 
 void fractional(void)
