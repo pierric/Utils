@@ -3,6 +3,7 @@
 #include <float.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <getopt.h>
 
 void integral(void)
 {
@@ -11,7 +12,9 @@ void integral(void)
 	printf("%10s |%6d |%21d |%21d\n",  "int" ,   8*sizeof(int), INT_MIN, INT_MAX);
 	printf("%10s |%6d |%21d |%21d\n",  "short",  8*sizeof(short), SHRT_MIN, SHRT_MAX);
 	printf("%10s |%6d |%21li |%21li\n",  "long",   8*sizeof(long),LONG_MIN, LONG_MAX);
+	#if __STDC_VERSION__ >= 199901L
 	printf("%10s |%6d |%21lli |%21lli\n", "long long", 8*sizeof(long long), LLONG_MIN, LLONG_MAX);
+	#endif
 }
 
 void fractional(void)
