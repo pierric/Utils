@@ -80,15 +80,31 @@ encode cfg (Binary s i f) = let (e,m) = if null i then caseA f else caseB i f
           exp_and_significant e m 
               | e < fst sn                = replicate (k + t) Z
               | fst sn <= e && e<= snd sn = let shift = - b - e
-                                            in replicate k Z ++ replicate shift Z ++ take (t - shift) m
+                                            in replicate k Z ++ replicate shift Z ++ mround (t - shift) m
               | fst no <= e && e<= snd no = let efield = reverse $ take k $ toBits $ b + e
-                                                mfield = take t (tail m)
+                                                mfield = mround t (tail m)
                                             in efield ++ mfield
               | otherwise                 = replicate (k + t) S
               where -- 转换成Bit序列
                     toBits x = case (x .&. 1) of {0 -> Z; 1-> S} : toBits (shiftR x 1)
                     sn = (- t + 1 - b, - b)
                     no = (- b + 1, b)
+                    -- 从bs中取n位,对n+1位舍入
+                    -- 若第n+1位为0,舍
+                    -- 若第n+1位为1,第n位为1,进
+                    -- 若第n+1位为1,第n位为0,则判断从n+2位起是否存在1,有则进,无则舍
+                    mround 0 bs = []
+                    mround n bs = let (b,a) = splitAt (n-1) bs 
+                                  in case a of
+                                       u:Z:_ -> b ++ [u]
+                                       S:S:_ -> carry S (b ++ [S])
+                                       Z:S:c -> if S `elem` (take 80 c)
+                                                then b ++ [S]
+                                                else b ++ [Z]
+                    carry c bs  = reverse $ carry_ c $ reverse bs
+                        where carry_ Z b = b
+                              carry_ S (Z:b) = S:b
+                              carry_ S (S:b) = Z:carry_ S b
           k  = cfg_efields cfg
           t  = cfg_mfields cfg
           b  = 2 ^ (k - 1) - 1
