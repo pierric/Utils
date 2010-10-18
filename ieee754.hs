@@ -3,7 +3,9 @@ module Main where
 
 import Data.Bits
 import Numeric(showHex)
-import Debug.Trace
+
+-- for testing
+import Data.Binary.IEEE754
 
 -- 0, 1, 无关
 data Bit = Z | S | U deriving (Eq, Show)
@@ -18,7 +20,7 @@ data Binary = Binary{ sign :: Bit, bin_integer, bin_fraction :: [Bit] }
 newtype IEEE754 = IEEE754 [Bit]
 
 -- 将任意的实数转换为Binary
-toBits   :: RealFrac a => a -> Binary
+n2b :: RealFrac a => a -> Binary
 
 -- 根据配置将Binary转换为IEEE754表述的浮点数,丢失精度
 encode :: Config -> Binary -> IEEE754
@@ -40,9 +42,9 @@ is_NaN :: Config -> IEEE754 -> Bool
 
 
 
-toBits num = let s = case signum num of{ -1 -> S; 0  -> U; 1  -> Z }
-                 (i :: Integer,f) = properFraction (abs num)
-             in  Binary s (reverse $ iToBin i) (fToBin f)
+n2b num = let s = case signum num of{ -1 -> S; 0  -> U; 1  -> Z }
+              (i :: Integer,f) = properFraction (abs num)
+          in  Binary s (reverse $ iToBin i) (fToBin f)
     where --整数部分到二进制,从低位到高位
           iToBin :: (Integral t, Bits t) => t -> [Bit]
           iToBin 0 = []
@@ -56,6 +58,9 @@ toBits num = let s = case signum num of{ -1 -> S; 0  -> U; 1  -> Z }
                                0 -> Z
                                1 -> S
                      in v : fToBin f'
+
+-- 转换成Bit序列
+w2b x = case (x .&. 1) of {0 -> Z; 1-> S} : w2b (shiftR x 1)
 
 encode cfg (Binary s i f) = let (e,m) = if null i then caseA f else caseB i f
                             in IEEE754 ([s] ++ exp_and_significant e m)
@@ -81,13 +86,11 @@ encode cfg (Binary s i f) = let (e,m) = if null i then caseA f else caseB i f
               | e < fst sn                = replicate (k + t) Z
               | fst sn <= e && e<= snd sn = let shift = - b - e
                                             in replicate k Z ++ replicate shift Z ++ mround (t - shift) m
-              | fst no <= e && e<= snd no = let efield = reverse $ take k $ toBits $ b + e
+              | fst no <= e && e<= snd no = let efield = reverse $ take k $ w2b $ b + e
                                                 mfield = mround t (tail m)
                                             in efield ++ mfield
               | otherwise                 = replicate (k + t) S
-              where -- 转换成Bit序列
-                    toBits x = case (x .&. 1) of {0 -> Z; 1-> S} : toBits (shiftR x 1)
-                    sn = (- t + 1 - b, - b)
+              where sn = (- t + 1 - b, - b)
                     no = (- b + 1, b)
                     -- 从bs中取n位,对n+1位舍入
                     -- 若第n+1位为0,舍
@@ -115,6 +118,7 @@ bit_value U = 0
           
 simple     = Config 4 3
 ieee32bits = Config 8 23
+ieee64bits = Config 11 52
 
 max_positive_normal cfg = let k = cfg_efields cfg
                               t = cfg_mfields cfg
@@ -152,3 +156,16 @@ instance Show Binary where
 
 instance Show IEEE754 where
     show (IEEE754 bits) = showHex (foldl (\e a -> e*2 + bit_value a) 0 bits) ""
+
+prop_64bits :: Double -> Bool
+prop_64bits dbl = let b1 = reverse $ take 64 $ w2b (doubleToWord dbl)
+                      IEEE754 (s:b2) = encode ieee64bits (n2b dbl)
+                  in case s of
+                       U -> tail b1 == b2
+                       _ -> b1 == s:b2
+prop_32bits :: Float -> Bool
+prop_32bits dbl = let b1 = reverse $ take 32 $ w2b (floatToWord dbl)
+                      IEEE754 (s:b2) = encode ieee32bits (n2b dbl)
+                  in case s of
+                       U -> tail b1 == b2
+                       _ -> b1 == s:b2
