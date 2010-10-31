@@ -1,14 +1,14 @@
 {-# OPTIONS -XScopedTypeVariables #-}
 module Main where
 
-import Data.Bits
 import Numeric(showHex)
 
 -- for testing
 import Data.Binary.IEEE754
+import Debug.Trace
 
 -- 0, 1, 无关
-data Bit = Z | S | U deriving (Eq, Show)
+data Bit = Z | S | U deriving (Eq, Show, Enum)
 -- 配置包括指数域长与尾数域长
 data Config = Config{ cfg_efields, cfg_mfields :: Int }
 -- 二进制展开表示一个数
@@ -43,79 +43,82 @@ is_NaN :: Config -> IEEE754 -> Bool
 
 
 n2b num = let s = case signum num of{ -1 -> S; 0  -> U; 1  -> Z }
-              (i :: Integer,f) = properFraction (abs num)
+              (i,f) = properFraction (abs num)
           in  Binary s (reverse $ iToBin i) (fToBin f)
     where --整数部分到二进制,从低位到高位
-          iToBin :: (Integral t, Bits t) => t -> [Bit]
           iToBin 0 = []
-          iToBin i = let v = case i .&. 1 of
-                               0 -> Z
-                               1 -> S
-                     in v : iToBin (shiftR i 1)
+          iToBin i = let (q,r) = quotRem i 2
+                     in toEnum (fromIntegral r) : iToBin q
           -- 小数部分到二进制
-          fToBin f = let (i',f') = properFraction (f*2)
-                         v = case i' of 
-                               0 -> Z
-                               1 -> S
-                     in v : fToBin f'
+          fToBin f = let (q,r) = properFraction (f*2)
+                     in toEnum (fromIntegral q) : fToBin r
 
 -- 转换成Bit序列
-w2b x = case (x .&. 1) of {0 -> Z; 1-> S} : w2b (shiftR x 1)
+w2b x = let (q,r) = quotRem x 2 in toEnum (fromIntegral r) : w2b q
 
-encode cfg (Binary s i f) = let (e,m) = if null i then caseA f else caseB i f
-                            in IEEE754 ([s] ++ exp_and_significant e m)
-    where -- 情况A:没有整数部分
-          caseA f = let (zs,s) = span (== Z) $ take (t * 3) (f ++ repeat Z)
-                    in if null s
-                       -- 为0,则指数为-t-b,标准式(1.*)无定义
-                       then (- (t + b), undefined)
-                       -- 不为0,则指数为负的0比特数减一,标准式为s
-                       else (- length zs - 1, s)
-          -- 情况B:有整数部分,则指数为整数部分比特数减一,标准式为i++s
-          caseB i f = (length i - 1, i++f)
-
-          -- 偏移指数,确定尾数
-          -- 若e < -t+1-b, 则移码为0
-          -- 若e in [-t+1-b, -b],移码为 1 - off_exp
-          -- 若e in [-b+1,b],移码为 e + b
-          -- 否则移码为 2^n-1.
-          -- ******************
-          -- Fixme. 舍入是否正确?
-          -- ******************
-          exp_and_significant e m 
-              | e < fst sn                = replicate (k + t) Z
-              | fst sn <= e && e<= snd sn = let shift = - b - e
-                                            in replicate k Z ++ replicate shift Z ++ mround (t - shift) m
-              | fst no <= e && e<= snd no = let efield = reverse $ take k $ w2b $ b + e
-                                                mfield = mround t (tail m)
-                                            in efield ++ mfield
-              | otherwise                 = replicate (k + t) S
-              where sn = (- t + 1 - b, - b)
-                    no = (- b + 1, b)
-                    -- 从bs中取n位,对n+1位舍入
-                    -- 若第n+1位为0,舍
-                    -- 若第n+1位为1,第n位为1,进
-                    -- 若第n+1位为1,第n位为0,则判断从n+2位起是否存在1,有则进,无则舍
-                    mround 0 bs = []
-                    mround n bs = let (b,a) = splitAt (n-1) bs 
-                                  in case a of
-                                       u:Z:_ -> b ++ [u]
-                                       S:S:_ -> carry S (b ++ [S])
-                                       Z:S:c -> if S `elem` (take 80 c)
-                                                then b ++ [S]
-                                                else b ++ [Z]
-                    carry c bs  = reverse $ carry_ c $ reverse bs
-                        where carry_ Z b = b
-                              carry_ S (Z:b) = S:b
-                              carry_ S (S:b) = Z:carry_ S b
-          k  = cfg_efields cfg
+-- 将Binary按Config转换为IEEE754
+encode cfg (Binary s i f) = let (m,e) = normalize i f -- if null i then caseA f else caseB i f
+                                (m',e') = round m e
+                            in IEEE754 ([s] ++ make_exponent_and_significant e' m')
+    where k  = cfg_efields cfg
           t  = cfg_mfields cfg
           b  = 2 ^ (k - 1) - 1
 
-bit_value Z = 0
-bit_value S = 1
-bit_value U = 0
-          
+          -- 将Binary规格化为m * 2^e，其中m成形于1.xx...
+          -- 情况A:没有整数部分
+          normalize [] f = let (zs,s) = span (== Z) $ take (t + b) (f ++ repeat Z)
+                           in if null s
+                              then (undefined, - (t + b))
+                              else (s, - length zs - 1)
+          -- 情况B:有整数部分
+          normalize i f  = (i++f, length i - 1)
+
+          sn = (- t + 1 - b, - b)      
+          no = (- b + 1, b)
+
+          round m e | e < fst sn                 = (m,e)
+                    | fst sn <= e && e <= snd sn = case mround t m of
+                                                     ([S],m') -> (S:m', e+1)
+                                                     ([Z],m') -> (m', e)
+                    | fst no <= e && e <= snd no = case mround (t+1) m of
+                                                     ([S],m') -> (S:m', e+1)
+                                                     ([Z],m') -> (m', e)
+                    | otherwise                  = (m,e)
+              where -- 从bs中取n位,对n+1位舍入
+                    -- 若第n+1位为0,舍
+                    -- 若第n+1位为1,第n位为1,进
+                    -- 若第n+1位为1,第n位为0,则判断从n+2位起是否存在1,有则进,无则舍
+                    mround :: Int -> [Bit] -> ([Bit],[Bit])
+                    mround 0 bs = error "t should be above zero"
+                    mround n bs = let (b,a) = splitAt (n-1) bs 
+                                  in case a of
+                                       u:Z:_ -> ([Z], b ++ [u])
+                                       S:S:_ -> carry S (b ++ [S])
+                                       Z:S:c -> if S `elem` (take 80 c)
+                                                then ([Z], b ++ [S])
+                                                else ([Z], b ++ [Z])
+                    carry c bs  = splitAt 1 $ reverse $ carry_ c $ reverse (Z:bs)
+                        where carry_ Z b = b
+                              carry_ S (Z:b) = S:b
+                              carry_ S (S:b) = Z:carry_ S b
+          -- 偏移指数,确定尾数
+          -- 若e <  -t+1-b, 则移码为0
+          -- 若e in [-t+1-b, -b],移码为 1 - off_exp
+          -- 若e in [-b+1,b],移码为 e + b
+          -- 否则移码为 2^n-1.
+          make_exponent_and_significant e m 
+              -- 0，指数与尾数部分全部为0
+              | e < fst sn                = replicate (k + t) Z 
+              -- subnormal，指数部分为0
+              | fst sn <= e && e<= snd sn = let shift = - b - e 
+                                            in replicate k Z ++ replicate shift Z ++ take (t - shift) m
+              -- normal，指数部分为e+b
+              | fst no <= e && e<= snd no = let efield = reverse $ take k $ w2b $ b + e
+                                            in efield ++ take t (tail m)
+              -- inf，指数全部为1，尾数全部为0
+              | otherwise                 = replicate k S ++ replicate t Z
+              
+
 simple     = Config 4 3
 ieee32bits = Config 8 23
 ieee64bits = Config 11 52
@@ -157,6 +160,10 @@ instance Show Binary where
 instance Show IEEE754 where
     show (IEEE754 bits) = showHex (foldl (\e a -> e*2 + bit_value a) 0 bits) ""
 
+bit_value Z = 0
+bit_value S = 1
+bit_value U = 0
+          
 prop_64bits :: Double -> Bool
 prop_64bits dbl = let b1 = reverse $ take 64 $ w2b (doubleToWord dbl)
                       IEEE754 (s:b2) = encode ieee64bits (n2b dbl)
