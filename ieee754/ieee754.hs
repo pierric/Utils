@@ -41,7 +41,6 @@ infinite :: Config -> IEEE754
 is_NaN :: Config -> IEEE754 -> Bool
 
 
-
 n2b num = let s = case signum num of{ -1 -> S; 0  -> U; 1  -> Z }
               (i,f) = properFraction (abs num)
           in  Binary s (reverse $ iToBin i) (fToBin f)
