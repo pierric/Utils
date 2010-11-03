@@ -4,9 +4,6 @@ import Data.Word
 import Data.Bits
 import Debug.Trace
 
-k = 4
-t = 3
-
 positive, negtive :: [Word8]
 positive = [0..0x78]    -- [0..2^(k+t)-2^t]
 negtive  = [0x80..0xf8] -- [2^(k+t)..2^(k+t+1)-2^t]

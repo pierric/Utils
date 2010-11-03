@@ -1,4 +1,3 @@
-{-# OPTIONS -XScopedTypeVariables #-}
 module Main where
 
 import Numeric(showHex)
@@ -52,18 +51,17 @@ n2b num = let s = case signum num of{ -1 -> S; 0  -> U; 1  -> Z }
           fToBin f = let (q,r) = properFraction (f*2)
                      in toEnum (fromIntegral q) : fToBin r
 
--- 转换成Bit序列
+-- 转换成Bit序列, 低位到高位
 w2b x = let (q,r) = quotRem x 2 in toEnum (fromIntegral r) : w2b q
 
 -- 将Binary按Config转换为IEEE754
-encode cfg (Binary s i f) = let (m,e) = normalize i f -- if null i then caseA f else caseB i f
-                                (m',e') = round m e
-                            in IEEE754 ([s] ++ make_exponent_and_significant e' m')
+encode cfg (Binary s i f) = let (m,e) = round $ normalize i f
+                            in IEEE754 ([s] ++ make_exponent_and_significant e m)
     where k  = cfg_efields cfg
           t  = cfg_mfields cfg
           b  = 2 ^ (k - 1) - 1
 
-          -- 将Binary规格化为m * 2^e，其中m成形于1.xx...
+          -- 将Binary统一化为m * 2^e，其中m成形于1.xx...
           -- 情况A:没有整数部分
           normalize [] f = let (zs,s) = span (== Z) $ take (t + b) (f ++ repeat Z)
                            in if null s
@@ -75,14 +73,14 @@ encode cfg (Binary s i f) = let (m,e) = normalize i f -- if null i then caseA f 
           sn = (- t + 1 - b, - b)      
           no = (- b + 1, b)
 
-          round m e | e < fst sn                 = (m,e)
-                    | fst sn <= e && e <= snd sn = case mround t m of
-                                                     ([S],m') -> (S:m', e+1)
-                                                     ([Z],m') -> (m', e)
-                    | fst no <= e && e <= snd no = case mround (t+1) m of
-                                                     ([S],m') -> (S:m', e+1)
-                                                     ([Z],m') -> (m', e)
-                    | otherwise                  = (m,e)
+          round (m,e) | e < fst sn                 = (m,e)
+                      | fst sn <= e && e <= snd sn = case mround t m of
+                                                       ([S],m') -> (S:m', e+1)
+                                                       ([Z],m') -> (m', e)
+                      | fst no <= e && e <= snd no = case mround (t+1) m of
+                                                       ([S],m') -> (S:m', e+1)
+                                                       ([Z],m') -> (m', e)
+                      | otherwise                  = (m,e)
               where -- 从bs中取n位,对n+1位舍入
                     -- 若第n+1位为0,舍
                     -- 若第n+1位为1,第n位为1,进
