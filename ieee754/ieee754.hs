@@ -155,7 +155,7 @@ instance Show Binary where
               fractional = drop 2 . show . foldr (\a e -> (bit_value a + e)/2) (0 :: Double) . take 50 
 
 instance Show IEEE754 where
-    show (IEEE754 bits) = showHex (foldl (\e a -> e*2 + bit_value a) 0 bits) ""
+    show (IEEE754 bits) = "0x" ++ showHex (foldl (\e a -> e*2 + bit_value a) 0 bits) ""
 
 bit_value Z = 0
 bit_value S = 1
@@ -173,3 +173,11 @@ prop_32bits dbl = let b1 = reverse $ take 32 $ w2b (floatToWord dbl)
                   in case s of
                        U -> tail b1 == b2
                        _ -> b1 == s:b2
+
+prop_inf cfg (Positive dbl) = 
+  let k = cfg_efields cfg
+      t = cfg_mfields cfg
+      b = 2^(k-1)-1
+      mp= 2^(b+1)-2^(b-t-1)
+      is_infinit (IEEE754 (_:bs)) = all (==S) (take k bs) && all(==Z) (drop k bs)
+  in is_infinit (encode cfg (n2b $ mp + dbl))
